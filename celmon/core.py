@@ -6,9 +6,14 @@ import django
 from rich.console import Console
 from rich.table import Table
 
+from celery import Celery
+
 from .models import QueueItem, Task
 
 class Celmon(object):
+
+    def __init__(self, celery_app: Celery) -> None:
+        self.celery_app = celery_app
     
     def __init__(self, app_name: str) -> None:
         self.app = app_name
@@ -121,6 +126,7 @@ class CelmonCLI(Celmon):
         super().__init__(app_name)
 
     def loop(self):
+        # Refer: https://rich.readthedocs.io/en/latest/live.html
         pass
 
     def show_tasks_status(self):
