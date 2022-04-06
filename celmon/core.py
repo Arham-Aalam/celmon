@@ -5,10 +5,10 @@ import importlib
 import django
 from rich.console import Console
 from rich.table import Table
-
+from celery.exceptions import DuplicateNodenameWarning
 from celery import Celery
 
-from .models import QueueItem, Task
+from .models import NodeItem, Task, PendingTask
 
 class Celmon(object):
 
@@ -25,7 +25,7 @@ class Celmon(object):
         os.environ['DJANGO_SETTINGS_MODULE'] = f'{self.app}.settings'
         django.setup()
         try:
-            self.celery_app = importlib.import_module('from {self.app}.celery import app as celery_app')
+            self.celery_app = importlib.import_module(f'{self.app}.celery').app
         except:
             raise ImportError(f'{self.app} does not have celery setup!')
 
@@ -49,75 +49,104 @@ class Celmon(object):
     '''
     Get queue len
     '''
-    def get_queue_len(self, key, conn=None) -> int:
-        if conn is None:
-            conn = self.celery_app.pool.acquire(block=True)
+    def get_queue_len(self, node_name, queue=None) -> int:
+        nodes = self.celery_app.control.inspect().active()
+        node = nodes.get(node_name, [])
+
+        if queue is None:
+            return len(node)
         
-        return conn.default_channel.client.llen(key)
+        count = 0
+        for task in node:
+            if task.get('delivery_info', {}).get('routing_key', '') == queue:
+                count += 1
+
+        return count
 
     '''
     Get all the queues
     '''
-    def get_queues(self, conn=None) -> list:
-        if conn is None:
-            conn = self.celery_app.pool.acquire(block=True)
-        
-        keys = conn.default_channel.client.keys('*')
-        
-        # Filter by list type
-        queues = []
-        for key in keys:
-            if conn.default_channel.client.type(key) == 'list':
-                queues.append(key)
-        
-        # TODO: Also filter by properties
+    def get_queues(self) -> list:
+        try:
+            queues = self.celery_app.control.inspect().active_queues()
+        except DuplicateNodenameWarning as e:
+            print(e)
+            print("[WAR] hint: Make sure you run workers with different node names.")
+            queues = self.celery_app.control.inspect().active_queues()
 
-        return queues
+        queue_items = []
+        for node, val in queues.items():
+            queue_items.append(NodeItem(node, val))
+        return queue_items
 
     '''
     Listout all the tasks
     '''
-    def get_tasks_list(self, conn=None) -> list:
-        if conn is None:
-            conn = self.celery_app.pool.acquire(block=True)
-        
-        queues = self.get_queues(conn=conn)
-        keys = conn.default_channel.client.keys('*')
-        keys = [key for key in keys if key not in queues]
-
-        # TODO: Also filter by properties
+    def get_active_tasks(self) -> list:
 
         tasks = []
-        for key in keys:
-            try:
-                task = Task(conn.default_channel.client.get(key))
-            except Exception as e:
-                print("[INFO] not a valid JSON", e)
-                continue
+        nodes = self.celery_app.control.inspect().active()
 
-            if 'task_id' in task.data:
-                tasks.append(task)
-        
+        for vals in nodes.values():
+            for task in vals:
+                tasks.append(Task(task))
         return tasks
 
-    def get_queue_items(self, key, conn=None):
-        if conn is None:
-            conn = self.celery_app.pool.acquire(block=True)
-        
-        qlen = self.get_queue_len(key, conn=conn)
-        items = conn.default_channel.client.lrange(key, 0, qlen+1)
+    def get_queue_active_tasks(self, node_name, queue=None) -> list:
+        nodes = self.celery_app.control.inspect().active()
+        tasks = nodes.get(node_name, [])
 
-        items_new = []
-        for item in items:
+        tasks_new = []
+        for task in tasks:
             try:
-                item = QueueItem(conn.default_channel.client.get(key))
+                item = Task(task)
             except Exception as e:
                 print("[INFO] not a valid JSON", e)
                 continue
-            if 'headers' in item.data:
-                items_new.append(item)
+            tasks_new.append(item)
+
+        if queue is None:
+            return tasks
         
-        return items_new
+        filtered_tasks = []
+        for task in filtered_tasks:
+            if task.get('delivery_info', {}).get('routing_key', '') == queue:
+                filtered_tasks.append(task)
+        
+        return filtered_tasks
+
+    def get_pending_queue_len(self, queue: str, conn=None):
+        if conn is None:
+            conn = self.celery_app.pool.acquire(block=True)
+        return conn.default_channel.client.llen(queue)
+
+    def get_pending_tasks_by_queue(self, queue: str, conn=None) -> list:
+        if conn is None:
+            conn = self.celery_app.pool.acquire(block=True)
+        qlen = self.get_pending_queue_len(queue, conn=conn)
+        pending_tasks = conn.default_channel.client.lrange(queue, 0, qlen+1)
+
+        tasks = []
+        for task in pending_tasks:
+            tasks.append(PendingTask(task))
+
+        return tasks
+    
+    '''
+    Returns all the tasks scheduled in on all nodes/workers
+    '''
+    def get_registered_tasks(self) -> list:
+        nodes = self.celery_app.control.inspect().registered()
+        tasks = []
+        for vals in nodes.values():
+            for task in vals:
+                try:
+                    item = Task(task)
+                except Exception as e:
+                    print("[INFO] not a valid JSON", e)
+                    continue
+                tasks.append(item)
+        return tasks
 
 
 class CelmonCLI(Celmon):
@@ -129,38 +158,44 @@ class CelmonCLI(Celmon):
         # Refer: https://rich.readthedocs.io/en/latest/live.html
         pass
 
-    def show_tasks_status(self):
-        tasks = self.get_tasks_list()
+    def show_active_tasks(self):
+        tasks = self.get_active_tasks()
 
         # Define table header
         table = Table(title="Celery tasks")
         table.add_column("task_id", justify="left", style="cyan", no_wrap=True)
+        table.add_column("name", style="red")
         table.add_column("status", style="red")
-        table.add_column("date_done", justify="left", style="green")
-        table.add_column("result", justify="left", style="green")
+        table.add_column("time_start", justify="left", style="green")
+        table.add_column("queue", justify="left", style="green")
 
         for task in tasks:
-            table.add_row(task.data.get('task_id', 'NA'), 
-                task.data.get('status', 'NA'), 
-                task.data.get('date_done', 'NA'),
-                task.data.get('result', 'NA'))
+            table.add_row(task.data.get('id', 'NA'),
+                task.data.get('name', 'NA'), 
+                "Active", 
+                task.data.get('time_start', 'NA'),
+                task.data.get('delivery_info', {}).get('routing_key'))
 
         console = Console()
         console.print(table)
 
     def show_queues(self):
         queues = self.get_queues()
-        qlens = []
+        qlens, names, nodes = [], [], []
 
         for queue in queues:
-            qlens.append(self.get_queue_len(queue))
+            for q in queue.queues:
+                names.append(q)
+                nodes.append(queue.node)
+                qlens.append(self.get_queue_len(queue.node, queue=q))
 
         table = Table(title="Celery queues")
         table.add_column("queue", justify="left", style="cyan", no_wrap=True)
+        table.add_column("node", justify="left", style="cyan")
         table.add_column("number of tasks", style="green")
 
-        for queue, qlen in zip(queues, qlens):
-            table.add_row(queue, qlen)
+        for queue, node, qlen in zip(names, nodes, qlens):
+            table.add_row(queue, node, qlen)
 
         console = Console()
         console.print(table)
