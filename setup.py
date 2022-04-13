@@ -8,5 +8,9 @@ setup(name='Celmon',
     install_requires=[
         'celery>=4.4.7',
         'rich>=12.0.1',
-    ]
+    ],
+    license='MIT',
+    entry_points = {
+        'console_scripts': ['celmon=celmon.cli:run_cli'],
+    }
 )

@@ -80,6 +80,26 @@ class Celmon(object):
         return queue_items
 
     '''
+    Get node by queue
+    '''
+    def get_node_by_queue(self, queue: str) -> list:
+        try:
+            queues = self.celery_app.control.inspect().active_queues()
+        except DuplicateNodenameWarning as e:
+            print(e)
+            print("[WAR] hint: Make sure you run workers with different node names.")
+            queues = self.celery_app.control.inspect().active_queues()
+
+        queue_items = []
+        for node, val in queues.items():
+            _node = NodeItem(node, val)
+            if queue in _node.queues:
+                return _node
+            del _node
+        
+        return None
+
+    '''
     Listout all the tasks
     '''
     def get_active_tasks(self) -> list:
@@ -92,7 +112,7 @@ class Celmon(object):
                 tasks.append(Task(task))
         return tasks
 
-    def get_queue_active_tasks(self, node_name, queue=None) -> list:
+    def get_active_tasks_by_node(self, node_name, queue=None) -> list:
         nodes = self.celery_app.control.inspect().active()
         tasks = nodes.get(node_name, [])
 
@@ -118,19 +138,43 @@ class Celmon(object):
     def get_pending_queue_len(self, queue: str, conn=None):
         if conn is None:
             conn = self.celery_app.pool.acquire(block=True)
-        return conn.default_channel.client.llen(queue)
+        try:
+            return conn.default_channel.client.llen(queue)
+        except TypeError:
+            return 0
 
+    '''
+    Get pending tasks by queue
+    '''
     def get_pending_tasks_by_queue(self, queue: str, conn=None) -> list:
         if conn is None:
             conn = self.celery_app.pool.acquire(block=True)
-        qlen = self.get_pending_queue_len(queue, conn=conn)
-        pending_tasks = conn.default_channel.client.lrange(queue, 0, qlen+1)
+        # qlen = self.get_pending_queue_len(queue, conn=conn)
+        pending_tasks = conn.default_channel.client.lrange(queue, 0, -1)
+        print("[INFO] pending_tasks", pending_tasks)
+
+        if not isinstance(pending_tasks, list):
+            pending_tasks = []
 
         tasks = []
         for task in pending_tasks:
             tasks.append(PendingTask(task))
 
         return tasks
+
+    '''
+    Get all pending tasks
+    '''
+    def get_all_pending_tasks(self) -> list:
+        queues = self.get_queues()
+        pending_tasks = []
+        for q in queues:
+            for name in q.queues:
+                tasks = self.get_pending_tasks_by_queue(name)
+                print(name, ':', tasks)
+                pending_tasks += tasks
+
+        return pending_tasks
     
     '''
     Returns all the tasks scheduled in on all nodes/workers
@@ -158,11 +202,15 @@ class CelmonCLI(Celmon):
         # Refer: https://rich.readthedocs.io/en/latest/live.html
         pass
 
-    def show_active_tasks(self):
-        tasks = self.get_active_tasks()
+    def show_active_tasks(self, queue=None):
+        if queue is not None:
+            node = self.get_node_by_queue(queue)
+            tasks = self.get_active_tasks_by_node(node.node, queue=queue)
+        else:
+            tasks = self.get_active_tasks()
 
         # Define table header
-        table = Table(title="Celery tasks")
+        table = Table(title="Celery active tasks")
         table.add_column("task_id", justify="left", style="cyan", no_wrap=True)
         table.add_column("name", style="red")
         table.add_column("status", style="red")
@@ -173,7 +221,7 @@ class CelmonCLI(Celmon):
             table.add_row(task.data.get('id', 'NA'),
                 task.data.get('name', 'NA'), 
                 "Active", 
-                task.data.get('time_start', 'NA'),
+                str(task.data.get('time_start', 'NA')),
                 task.data.get('delivery_info', {}).get('routing_key'))
 
         console = Console()
@@ -195,7 +243,37 @@ class CelmonCLI(Celmon):
         table.add_column("number of tasks", style="green")
 
         for queue, node, qlen in zip(names, nodes, qlens):
-            table.add_row(queue, node, qlen)
+            table.add_row(queue, node, str(qlen))
 
         console = Console()
         console.print(table)
+
+    def show_pending_tasks(self, queue=None):
+        table, tasks = None, []
+        if queue:
+            tasks = self.get_pending_tasks_by_queue(queue=queue)
+            table = Table(title=f"Pending celery tasks for {queue}")
+        else:
+            tasks = self.get_all_pending_tasks()
+            table = Table(title=f"All pending celery tasks")
+        
+        table.add_column("task_id", justify="left", style="cyan", no_wrap=True)
+        table.add_column("name", style="red")
+        table.add_column("arguments", style="green")
+        table.add_column("keyword arguments", justify="left", style="green")
+        table.add_column("queue", justify="left", style="green")
+
+        for task in tasks:
+            table.add_row(
+                task.data.get('headers', {}).get('id', 'NA'), 
+                task.data.get('headers', {}).get('task', 'NA'),
+                task.data.get('headers', {}).get('argsrepr', 'NA'),
+                task.data.get('headers', {}).get('kwargsrepr', 'NA'),
+                task.data.get('properties', {}).get('delivery_info', {}).get('routing_key', 'NA'),
+            )
+        console = Console()
+        console.print(table)
+        
+
+    def show_periodic_tasks(self, queue=None):
+        raise NotImplemented()

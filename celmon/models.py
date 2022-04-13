@@ -15,7 +15,7 @@ import json
 {'celery@mnode': [],                   
  'celery@rnode': [{'id': 'd8c56f69-36d6-4462-bc7b-63b8ff4bf8d4',                                                                                              
    'name': 'process_report',                                                   
-   'args': [{'first_name': 'Cecil',                                            
+   'args': [{'first_name': 'name',                                            
      },                                                    
     'idi',                         
     387],                              
@@ -116,13 +116,13 @@ class NodeItem(object):
         return self.node + '\n' + json.dumps(self.data, indent=4)
 
 '''
-"{\"body\": \"W1sxLCAzXSwge30sIHsiY2FsbGJhY2tzIjogbnVsbCwgImVycmJhY2tzIjogbnVsbCwgImNoYWluIjogbnVsbCwgImNob3JkIjogbnVsbH1d\", \"content-encoding\": \"utf-
-8\", \"content-type\": \"application/json\", \"headers\": {\"lang\": \"py\", \"task\": \"add\", \"id\": \"bfdebfa0-8591-44fc-aa58-0fe317e4c013\", \"shadow\": 
-null, \"eta\": null, \"expires\": null, \"group\": null, \"group_index\": null, \"retries\": 0, \"timelimit\": [null, null], \"root_id\": \"bfdebfa0-8591-44fc
--aa58-0fe317e4c013\", \"parent_id\": null, \"argsrepr\": \"(1, 3)\", \"kwargsrepr\": \"{}\", \"origin\": \"gen523790@7b25640d2cdd\", \"ignore_result\": false}
-, \"properties\": {\"correlation_id\": \"bfdebfa0-8591-44fc-aa58-0fe317e4c013\", \"reply_to\": \"39dd6aa1-ff80-3175-8262-c39c6eac9fa1\", \"delivery_mode\": 2,
- \"delivery_info\": {\"exchange\": \"\", \"routing_key\": \"reports\"}, \"priority\": 0, \"body_encoding\": \"base64\", \"delivery_tag\": \"d6b1ede2-7013-41e1
--bc4d-5b0a9cf3361d\"}}"
+"{"body": "W1sxLCAzXSwge30sIHsiY2FsbGJhY2tzIjogbnVsbCwgImVycmJhY2tzIjogbnVsbCwgImNoYWluIjogbnVsbCwgImNob3JkIjogbnVsbH1d", "content-encoding": "utf-
+8", "content-type": "application/json", "headers": {"lang": "py", "task": "add", "id": "bfdebfa0-8591-44fc-aa58-0fe317e4c013", "shadow": 
+null, "eta": null, "expires": null, "group": null, "group_index": null, "retries": 0, "timelimit": [null, null], "root_id": "bfdebfa0-8591-44fc
+-aa58-0fe317e4c013", "parent_id": null, "argsrepr": "(1, 3)", "kwargsrepr": "{}", "origin": "gen523790@7b25640d2cdd", "ignore_result": false}
+, "properties": {"correlation_id": "bfdebfa0-8591-44fc-aa58-0fe317e4c013", "reply_to": "39dd6aa1-ff80-3175-8262-c39c6eac9fa1", "delivery_mode": 2,
+ "delivery_info": {"exchange": "", "routing_key": "reports"}, "priority": 0, "body_encoding": "base64", "delivery_tag": "d6b1ede2-7013-41e1
+-bc4d-5b0a9cf3361d"}}"
 '''
 class PendingTask(Task):
 
