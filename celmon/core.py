@@ -150,8 +150,11 @@ class Celmon(object):
         if conn is None:
             conn = self.celery_app.pool.acquire(block=True)
         # qlen = self.get_pending_queue_len(queue, conn=conn)
-        pending_tasks = conn.default_channel.client.lrange(queue, 0, -1)
-        print("[INFO] pending_tasks", pending_tasks)
+        retry, pending_tasks = 0, None
+        while pending_tasks is None and retry < 3:
+            pending_tasks = conn.default_channel.client.lrange(queue, 0, -1)
+            retry += 1
+        # print("[INFO] pending_tasks", pending_tasks)
 
         if not isinstance(pending_tasks, list):
             pending_tasks = []
@@ -168,10 +171,12 @@ class Celmon(object):
     def get_all_pending_tasks(self) -> list:
         queues = self.get_queues()
         pending_tasks = []
+        # print(queues)
         for q in queues:
+            # print('->', q.queues)
             for name in q.queues:
                 tasks = self.get_pending_tasks_by_queue(name)
-                print(name, ':', tasks)
+                # print(name, ':', tasks)
                 pending_tasks += tasks
 
         return pending_tasks

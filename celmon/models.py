@@ -1,4 +1,5 @@
 import json
+from typing import Any
 
 '''
 {
@@ -32,13 +33,12 @@ import json
 '''
 class Task(object):
 
-    def __init__(self, data: bytes) -> None:
-        self.data = self._parse(data)
+    def __init__(self, data: Any) -> None:
+        if isinstance(data, bytes):
+            data = self._parse(data)
+        self.data = data
 
         # TODO: Need to define and set member variables.
-
-    def __init__(self, data: dict) -> None:
-        self.data = data
 
     def _parse(self, data: bytes) -> dict:
         data = data.decode('utf-8')
