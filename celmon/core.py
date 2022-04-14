@@ -129,8 +129,8 @@ class Celmon(object):
             return tasks
         
         filtered_tasks = []
-        for task in filtered_tasks:
-            if task.get('delivery_info', {}).get('routing_key', '') == queue:
+        for task in tasks_new:
+            if task.data.get('delivery_info', {}).get('routing_key', '') == queue:
                 filtered_tasks.append(task)
         
         return filtered_tasks
