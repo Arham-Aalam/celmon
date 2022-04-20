@@ -6,6 +6,10 @@ A command-line monitoring tool for celery.
 
 - Django
 
+## Supported brokers
+
+- Redis
+
 ## Installation
 
 ```
@@ -96,3 +100,6 @@ celmon -A accepted_risk -pt -q super_important
 └──────────────────────────────────────┴──────┴───────────┴───────────────────┴─────────────────┘
 ```
 
+## License
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
