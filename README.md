@@ -102,4 +102,4 @@ celmon -A accepted_risk -pt -q super_important
 
 ## License
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/Arham-Aalam/celmon/blob/master/LICENSE)
